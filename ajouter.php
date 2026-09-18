@@ -5,6 +5,7 @@ if (!isset($_SESSION['id_utilisateur'])) {
 	header('Location: login.php');
 	exit;
 }
+require_once "connexion.php";
 
 $reference = trim($_POST['reference'] ?? '');
 $designation = trim($_POST['designation'] ?? '');
@@ -32,16 +33,13 @@ if (is_numeric($prix_achat) && is_numeric($prix_vente) && floatval($prix_vente) 
 	$errors[] = 'Le prix de vente doit être supérieur ou égal au prix d\'achat.';
 }
 
-// Ensure session products exist
-if (!isset($_SESSION['produits'])) $_SESSION['produits'] = [];
-
-// Uniqueness: reference
-foreach ($_SESSION['produits'] as $p) {
-	if (strtolower($p['reference']) === strtolower($reference)) {
-		$errors[] = 'La référence existe déjà.';
-		break;
-	}
-}
+// Uniqueness: reference for the current user
+$check = $pdo->prepare('SELECT id FROM produits WHERE id_utilisateur = :id_utilisateur AND LOWER(reference) = LOWER(:reference)');
+$check->execute([
+	'id_utilisateur' => $_SESSION['id_utilisateur'],
+	'reference' => $reference
+]);
+if ($check->fetch()) $errors[] = 'La référence existe déjà.';
 
 // If errors, save and redirect back
 if (!empty($errors)) {
@@ -57,21 +55,15 @@ if (!empty($errors)) {
 	exit;
 }
 
-// Create new product
-$maxId = 0;
-foreach ($_SESSION['produits'] as $p) {
-	if ($p['id'] > $maxId) $maxId = $p['id'];
-}
-
-$newProduit = [
-	'id' => $maxId + 1,
+// Create the product in MySQL
+$insert = $pdo->prepare('INSERT INTO produits (id_utilisateur, reference, designation, prix_achat, prix_vente) VALUES (:id_utilisateur, :reference, :designation, :prix_achat, :prix_vente)');
+$insert->execute([
+	'id_utilisateur' => $_SESSION['id_utilisateur'],
 	'reference' => $reference,
 	'designation' => $designation,
 	'prix_achat' => floatval($prix_achat),
 	'prix_vente' => floatval($prix_vente)
-];
-
-$_SESSION['produits'][] = $newProduit;
+]);
 
 // Clear any old form data/errors
 unset($_SESSION['form_errors'], $_SESSION['old_add']);

@@ -5,6 +5,7 @@ if (!isset($_SESSION['id_utilisateur'])) {
     header('Location: login.php');
     exit;
 }
+require_once "connexion.php";
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $id = $_POST['id'] ?? null;
@@ -39,14 +40,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = 'Le prix de vente doit être supérieur ou égal au prix d\'achat.';
     }
 
-    if (!isset($_SESSION['produits'])) $_SESSION['produits'] = [];
-
     // Uniqueness: reference excluding current product
-    foreach ($_SESSION['produits'] as $p) {
-        if ($p['id'] != $id && strtolower($p['reference']) === strtolower($reference)) {
-            $errors[] = 'La référence existe déjà.';
-            break;
-        }
+    $check = $pdo->prepare('SELECT id FROM produits WHERE id_utilisateur = :id_utilisateur AND LOWER(reference) = LOWER(:reference) AND id <> :id');
+    $check->execute([
+        'id_utilisateur' => $_SESSION['id_utilisateur'],
+        'reference' => $reference,
+        'id' => $id
+    ]);
+    if ($check->fetch()) {
+        $errors[] = 'La référence existe déjà.';
     }
 
     if (!empty($errors)) {
@@ -63,15 +65,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
-    foreach ($_SESSION['produits'] as &$prod) {
-        if ($prod['id'] == $id) {
-            $prod['reference'] = $reference;
-            $prod['designation'] = $designation;
-            $prod['prix_achat'] = floatval($prix_achat);
-            $prod['prix_vente'] = floatval($prix_vente);
-            break;
-        }
-    }
+    $update = $pdo->prepare('UPDATE produits SET reference = :reference, designation = :designation, prix_achat = :prix_achat, prix_vente = :prix_vente WHERE id = :id AND id_utilisateur = :id_utilisateur');
+    $update->execute([
+        'reference' => $reference,
+        'designation' => $designation,
+        'prix_achat' => floatval($prix_achat),
+        'prix_vente' => floatval($prix_vente),
+        'id' => $id,
+        'id_utilisateur' => $_SESSION['id_utilisateur']
+    ]);
 
     // Clear errors/old
     unset($_SESSION['form_errors_modify'], $_SESSION['old_modify']);
@@ -87,15 +89,12 @@ if ($id === null || $id === '') {
     exit;
 }
 
-if (!isset($_SESSION['produits'])) $_SESSION['produits'] = [];
-
-$produit = null;
-foreach ($_SESSION['produits'] as $p) {
-    if ($p['id'] == $id) {
-        $produit = $p;
-        break;
-    }
-}
+$select = $pdo->prepare('SELECT id, reference, designation, prix_achat, prix_vente FROM produits WHERE id = :id AND id_utilisateur = :id_utilisateur');
+$select->execute([
+    'id' => $id,
+    'id_utilisateur' => $_SESSION['id_utilisateur']
+]);
+$produit = $select->fetch(PDO::FETCH_ASSOC);
 
 if ($produit === null) {
     header('Location: index.php');
@@ -103,9 +102,12 @@ if ($produit === null) {
 }
 
 $otherRefs = [];
-foreach ($_SESSION['produits'] as $p) {
-    if ($p['id'] != $id) $otherRefs[] = strtolower($p['reference']);
-}
+$refStmt = $pdo->prepare('SELECT reference FROM produits WHERE id_utilisateur = :id_utilisateur AND id <> :id');
+$refStmt->execute([
+    'id_utilisateur' => $_SESSION['id_utilisateur'],
+    'id' => $id
+]);
+$otherRefs = array_map('strtolower', $refStmt->fetchAll(PDO::FETCH_COLUMN));
 
 ?>
 

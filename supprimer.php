@@ -5,6 +5,7 @@ if (!isset($_SESSION['id_utilisateur'])) {
 	header('Location: login.php');
 	exit;
 }
+require_once "connexion.php";
 
 $id = $_GET['id'] ?? null;
 
@@ -13,14 +14,11 @@ if ($id === null || $id === '') {
 	exit;
 }
 
-if (!isset($_SESSION['produits'])) $_SESSION['produits'] = [];
-
-foreach ($_SESSION['produits'] as $idx => $p) {
-	if ($p['id'] == $id) {
-		array_splice($_SESSION['produits'], $idx, 1);
-		break;
-	}
-}
+$delete = $pdo->prepare('DELETE FROM produits WHERE id = :id AND id_utilisateur = :id_utilisateur');
+$delete->execute([
+	'id' => $id,
+	'id_utilisateur' => $_SESSION['id_utilisateur']
+]);
 
 header('Location: index.php');
 exit;

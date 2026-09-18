@@ -8,28 +8,35 @@ if (!isset($_SESSION['id_utilisateur'])) {
     exit;
 }
 
-$initialProduits = [
-    [
-        "id" => 1,
-        "reference" => "P001",
-        "designation" => "Ordinateur HP",
-        "prix_achat" => 5000,
-        "prix_vente" => 6500
-    ],
-    [
-        "id" => 2,
-        "reference" => "P002",
-        "designation" => "Souris Logitech",
-        "prix_achat" => 100,
-        "prix_vente" => 150
-    ]
-];
+// Migrate products created by the previous session-based version once.
+if (!empty($_SESSION['produits']) && is_array($_SESSION['produits'])) {
+    $countStmt = $pdo->prepare('SELECT COUNT(*) FROM produits WHERE id_utilisateur = :id_utilisateur');
+    $countStmt->execute(['id_utilisateur' => $_SESSION['id_utilisateur']]);
 
-if (!isset($_SESSION['produits'])) {
-    $_SESSION['produits'] = $initialProduits;
+    if ((int) $countStmt->fetchColumn() === 0) {
+        $migrate = $pdo->prepare('INSERT INTO produits (id_utilisateur, reference, designation, prix_achat, prix_vente) VALUES (:id_utilisateur, :reference, :designation, :prix_achat, :prix_vente)');
+
+        foreach ($_SESSION['produits'] as $ancienProduit) {
+            if (!isset($ancienProduit['reference'], $ancienProduit['designation'], $ancienProduit['prix_achat'], $ancienProduit['prix_vente'])) {
+                continue;
+            }
+
+            $migrate->execute([
+                'id_utilisateur' => $_SESSION['id_utilisateur'],
+                'reference' => $ancienProduit['reference'],
+                'designation' => $ancienProduit['designation'],
+                'prix_achat' => $ancienProduit['prix_achat'],
+                'prix_vente' => $ancienProduit['prix_vente']
+            ]);
+        }
+    }
+
+    unset($_SESSION['produits']);
 }
 
-$produits = &$_SESSION['produits'];
+$stmt = $pdo->prepare('SELECT id, reference, designation, prix_achat, prix_vente FROM produits WHERE id_utilisateur = :id_utilisateur ORDER BY id DESC');
+$stmt->execute(['id_utilisateur' => $_SESSION['id_utilisateur']]);
+$produits = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 ?>
 
